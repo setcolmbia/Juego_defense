@@ -1,0 +1,40 @@
+import { buildCreature } from '../../render/CreatureBuilder';
+import type { DefenderStats } from '../../entities/Defender';
+
+export const Meerkat: DefenderStats = {
+  id: 'meerkat',
+  name: 'Meerkat Sentinel',
+  description: 'Genera energía con el tiempo. Frágil pero vital para la economía.',
+  icon: '🦫',
+  cost: 30,
+  cooldown: 5,
+  maxHealth: 45,
+  damage: 0,
+  attackRate: 0,
+  range: 0,
+  isSupport: true,
+  energyInterval: 8,
+  energyAmount: 25,
+  projectileColor: 0xfff2c0,
+  scale: 0.72,
+  attackSound: 'peck',
+  buildModel: () =>
+    buildCreature({
+      bodyColor: 0xd9b184,
+      secondaryColor: 0x8a6640,
+      accentColor: 0xfff2c0,
+      eyeColor: 0x1a1a1a,
+      bodyLength: 0.85,
+      bodyRadius: 0.32,
+      legHeight: 0.4,
+      legRadius: 0.09,
+      legCount: 2,
+      neckLength: 0.45,
+      headRadius: 0.28,
+      snoutLength: 0.14,
+      earType: 'round',
+      tailType: 'long',
+      hornType: 'none',
+      roughness: 0.85,
+    }),
+};
