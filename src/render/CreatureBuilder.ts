@@ -72,14 +72,22 @@ export const DEFAULT_CREATURE: CreatureConfig = {
   scale: 1,
 };
 
-function mat(color: number, cfg: CreatureConfig, extra?: Partial<THREE.MeshStandardMaterialParameters>) {
+/**
+ * A strong emissiveIntensity applied uniformly across a large body surface
+ * washes the base color out to a flat glow-color silhouette (e.g. a dark
+ * purple alien reads as solid hot pink). Body/secondary materials only get a
+ * fraction of the configured intensity so the base color still reads and the
+ * glow feels like an accent rather than replacing the surface; accent parts
+ * (horns, spikes, plates) can run a bit hotter since they're small details.
+ */
+function mat(color: number, cfg: CreatureConfig, extra?: Partial<THREE.MeshStandardMaterialParameters>, emissiveScale = 0.3) {
   return new THREE.MeshStandardMaterial({
     color,
     roughness: cfg.roughness,
     metalness: cfg.metalness,
     flatShading: true,
     emissive: cfg.emissive,
-    emissiveIntensity: cfg.emissiveIntensity,
+    emissiveIntensity: cfg.emissiveIntensity * emissiveScale,
     ...extra,
   });
 }
@@ -107,9 +115,9 @@ export function buildCreature(cfg: Partial<CreatureConfig>): CreatureRig {
   const allMeshes: THREE.Mesh[] = [];
 
   const root = new THREE.Group();
-  const primaryMat = mat(c.bodyColor, c);
-  const secondaryMat = mat(c.secondaryColor, c);
-  const accentMat = mat(c.accentColor, c, { roughness: 0.35, metalness: 0.2 });
+  const primaryMat = mat(c.bodyColor, c, undefined, 0.1);
+  const secondaryMat = mat(c.secondaryColor, c, undefined, 0.14);
+  const accentMat = mat(c.accentColor, c, { roughness: 0.35, metalness: 0.2 }, 0.55);
   const eyeMat = new THREE.MeshStandardMaterial({ color: c.eyeColor, roughness: 0.2, metalness: 0.1 });
   const eyeGlowMat = c.emissiveIntensity > 0
     ? new THREE.MeshStandardMaterial({ color: c.accentColor, emissive: c.accentColor, emissiveIntensity: 2.2, roughness: 0.3 })

@@ -13,6 +13,7 @@ import { SpawnManager } from '../systems/SpawnManager';
 import { HUD } from '../ui/HUD';
 import { SettingsPanel } from '../ui/SettingsPanel';
 import { ANIMAL_ROSTER, getAnimal } from '../data/AnimalRegistry';
+import { getAlien } from '../data/AlienRegistry';
 import { LEVEL1_WAVES, LEVEL1_NAME } from '../data/Level1';
 import { colToX } from '../world/GridConfig';
 
@@ -95,6 +96,38 @@ export class Game {
     this.wireInput();
 
     window.addEventListener('pointerdown', () => this.audio.startAmbientMusic(), { once: true });
+
+    if (import.meta.env.DEV) this.exposeDebugAPI();
+  }
+
+  /**
+   * Dev-only console API for QA/testing — lets automated scripts spawn any
+   * unit or skip waits instantly instead of playing through real timers.
+   * Stripped in production builds via the import.meta.env.DEV guard above.
+   */
+  private exposeDebugAPI() {
+    (window as unknown as { __debug: Record<string, unknown> }).__debug = {
+      spawnAlien: (id: string, row = 2, xOffset = 0) => this.combat.spawnAlien(getAlien(id), row, xOffset),
+      placeAnimal: (id: string, col = 3, row = 2) => {
+        const stats = getAnimal(id);
+        if (!this.grid.isFree(col, row)) return null;
+        this.grid.setOccupied(col, row, true);
+        return this.combat.addDefender(stats, col, row);
+      },
+      giveEnergy: (amount = 500) => this.economy.add(amount),
+      listAnimals: () => ANIMAL_ROSTER.map((a) => a.id),
+      listAliens: () => ['scuttler', 'brute', 'hunter', 'reaper', 'overlord'],
+      forceWin: () => this.win(),
+      forceLose: () => this.lose(),
+      state: () => ({
+        energy: this.economy.energy,
+        baseHealth: this.baseHealth,
+        wave: this.spawn.waveIndex,
+        phase: this.spawn.phase,
+        defenders: this.combat.defenders.length,
+        aliens: this.combat.aliens.length,
+      }),
+    };
   }
 
   private setupCamera() {
