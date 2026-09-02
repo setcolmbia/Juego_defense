@@ -102,7 +102,7 @@ export function buildEnvironment(scene: THREE.Scene): EnvironmentHandles {
   const shipDefs = [
     { pos: new THREE.Vector3(23, 3.5, -16), scale: 1.0 },
     { pos: new THREE.Vector3(10, 3.5, -24), scale: 0.8 },
-    { pos: new THREE.Vector3(28, 1.3, -29), scale: 0.55 },
+    { pos: new THREE.Vector3(6.7, 2, -37), scale: 0.5 },
   ];
   shipDefs.forEach(({ pos, scale }, i) => {
     const ship = new THREE.Group();
@@ -199,6 +199,67 @@ export function buildEnvironment(scene: THREE.Scene): EnvironmentHandles {
     bush.castShadow = true;
     bush.receiveShadow = true;
     group.add(bush);
+  }
+
+  // A couple of paler/rustier accent rocks for a bit of color variety among the grey ones
+  const accentRockMat = new THREE.MeshStandardMaterial({ color: 0x8a6f52, roughness: 1, flatShading: true });
+  for (let i = 0; i < 3; i++) {
+    const s = 0.5 + Math.random() * 0.7;
+    const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(s, 0), accentRockMat);
+    const side = Math.random() > 0.5 ? 1 : -1;
+    rock.position.set(THREE.MathUtils.randFloat(BASE_X - 2, colToX(COLS - 1) + 5), s * 0.4, side * (ROWS / 2 * TILE + THREE.MathUtils.randFloat(1, 5)));
+    rock.rotation.set(Math.random(), Math.random(), Math.random());
+    rock.castShadow = true;
+    rock.receiveShadow = true;
+    group.add(rock);
+  }
+
+  // Dead trees - bare trunk + a few angular branches, silhouetted against the dusk sky
+  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x3a2e22, roughness: 1, flatShading: true });
+  for (let i = 0; i < 3; i++) {
+    const tree = new THREE.Group();
+    const h = 1.6 + Math.random() * 1.1;
+    const trunkGeo = new THREE.CylinderGeometry(0.09, 0.16, h, 5);
+    const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+    trunk.position.y = h / 2;
+    trunk.castShadow = true;
+    tree.add(trunk);
+    const branchCount = 3 + Math.floor(Math.random() * 2);
+    for (let b = 0; b < branchCount; b++) {
+      const bh = h * (0.35 + Math.random() * 0.35);
+      const branchGeo = new THREE.CylinderGeometry(0.04, 0.08, bh, 4);
+      const branch = new THREE.Mesh(branchGeo, trunkMat);
+      const a = (b / branchCount) * Math.PI * 2 + Math.random() * 0.6;
+      branch.position.set(0, h * (0.55 + Math.random() * 0.35), 0);
+      branch.rotation.z = Math.PI / 2.4;
+      branch.rotation.y = a;
+      branch.castShadow = true;
+      tree.add(branch);
+    }
+    const side = Math.random() > 0.5 ? 1 : -1;
+    tree.position.set(THREE.MathUtils.randFloat(BASE_X - 2, colToX(COLS - 1) + 5), 0, side * (ROWS / 2 * TILE + THREE.MathUtils.randFloat(2, 6)));
+    group.add(tree);
+  }
+
+  // Termite mounds - tall tapered silhouettes for savanna flavor
+  const moundMat = new THREE.MeshStandardMaterial({ color: 0x9c6b3e, roughness: 1, flatShading: true });
+  for (let i = 0; i < 2; i++) {
+    const mound = new THREE.Group();
+    const baseH = 1.3 + Math.random() * 0.8;
+    const coneGeo = new THREE.ConeGeometry(0.55, baseH, 7);
+    const cone = new THREE.Mesh(coneGeo, moundMat);
+    cone.position.y = baseH / 2;
+    cone.castShadow = true;
+    cone.receiveShadow = true;
+    mound.add(cone);
+    const tipGeo = new THREE.ConeGeometry(0.22, baseH * 0.45, 6);
+    const tip = new THREE.Mesh(tipGeo, moundMat);
+    tip.position.y = baseH + baseH * 0.18;
+    tip.castShadow = true;
+    mound.add(tip);
+    const side = Math.random() > 0.5 ? 1 : -1;
+    mound.position.set(THREE.MathUtils.randFloat(BASE_X - 2, colToX(COLS - 1) + 5), 0, side * (ROWS / 2 * TILE + THREE.MathUtils.randFloat(1, 5)));
+    group.add(mound);
   }
 
   // Home base marker (animal camp)
