@@ -140,15 +140,27 @@ export function buildEnvironment(scene: THREE.Scene): EnvironmentHandles {
   const grassColorA = new THREE.Color(0x5b8a3a);
   const grassColorB = new THREE.Color(0x8fae4a);
   const dirtColor = new THREE.Color(0xa9773f);
+  // The playable board is kept perfectly flat (like a mown PvZ lawn) so the
+  // grid cells sit cleanly on top and nothing pokes through them; the rolling
+  // noise only kicks in outside the board, blended over a short margin.
+  const boardHalfWidth = (COLS * TILE) / 2;
+  const boardHalfDepth = (ROWS * TILE) / 2;
+  const flatMargin = TILE * 0.9;
   for (let i = 0; i < posAttr.count; i++) {
     const x = posAttr.getX(i);
     const z = posAttr.getZ(i);
     const n = noise(x * 0.15, z * 0.15);
-    const y = n * 0.22;
+    // Local plane coords are centred on the board, so distance-outside-board
+    // is measured straight from the local origin.
+    const outsideX = Math.max(0, Math.abs(x) - boardHalfWidth);
+    const outsideZ = Math.max(0, Math.abs(z) - boardHalfDepth);
+    const outside = Math.max(outsideX, outsideZ);
+    const reliefMask = THREE.MathUtils.smoothstep(outside, 0, flatMargin);
+    const y = n * 0.22 * reliefMask;
     posAttr.setY(i, y);
 
     const localCol = x / TILE;
-    const inLane = localCol > -1.8 && localCol < COLS + 0.3;
+    const inLane = reliefMask < 0.5;
     let col: THREE.Color;
     if (inLane) {
       col = grassColorA.clone().lerp(grassColorB, valueNoise2D(3)(x * 0.4, z * 0.4));
@@ -168,14 +180,7 @@ export function buildEnvironment(scene: THREE.Scene): EnvironmentHandles {
   ground.position.set(colToX((COLS - 1) / 2), 0, 0);
   group.add(ground);
 
-  // Lane tile outlines (subtle)
-  const laneLinesMat = new THREE.LineBasicMaterial({ color: 0xdfe8c8, transparent: true, opacity: 0.4 });
-  for (let r = 0; r <= ROWS; r++) {
-    const z = (r - ROWS / 2) * TILE;
-    const pts = [new THREE.Vector3(BASE_X - TILE, 0.15, z), new THREE.Vector3(colToX(COLS - 1) + TILE, 0.15, z)];
-    const geo = new THREE.BufferGeometry().setFromPoints(pts);
-    group.add(new THREE.Line(geo, laneLinesMat));
-  }
+  // Lane markers are drawn by Grid.ts as explicit playable cells now.
 
   // Rim rocks / foliage clumps for framing
   const rockMat = new THREE.MeshStandardMaterial({ color: 0x6b6558, roughness: 1, flatShading: true });

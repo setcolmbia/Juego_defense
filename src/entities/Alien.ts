@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import type { CreatureRig } from '../render/CreatureBuilder';
-import { rowToZ, SPAWN_X } from '../world/GridConfig';
+import { computeFitScale, type CreatureRig } from '../render/CreatureBuilder';
+import { rowToZ, SPAWN_X, TILE } from '../world/GridConfig';
 
 export interface AlienStats {
   id: string;
@@ -33,6 +33,8 @@ export class Alien {
   private deathT = -1;
   private bodyBaseYPos: number;
   private flyBaseY = 0;
+  /** Artistic scale, clamped so attackers stay within their lane's width. */
+  readonly displayScale: number;
 
   constructor(stats: AlienStats, row: number, spawnXOffset = 0) {
     this.uid = uidCounter++;
@@ -41,10 +43,14 @@ export class Alien {
     this.hp = stats.maxHealth;
     this.x = SPAWN_X + spawnXOffset;
     this.rig = stats.buildModel();
-    this.rig.root.scale.setScalar(stats.scale);
+    // Bosses get a little more headroom than rank-and-file attackers.
+    const maxLen = TILE * (stats.boss ? 1.15 : 0.95);
+    this.displayScale = Math.min(stats.scale, computeFitScale(this.rig.root, maxLen, maxLen));
+    this.rig.root.scale.setScalar(this.displayScale);
     this.flyBaseY = stats.flying ? 2.4 : 0;
     this.rig.root.position.set(this.x, this.flyBaseY, rowToZ(row));
-    this.rig.root.rotation.y = -Math.PI / 2; // face toward base (-X)
+    // Modelled head-first along local +X; aliens march toward -X, so flip them.
+    this.rig.root.rotation.y = Math.PI;
     this.bodyBaseYPos = this.rig.body.position.y;
   }
 
@@ -72,7 +78,7 @@ export class Alien {
     if (this.deathT >= 0) {
       this.deathT += dt;
       const p = this.deathT / 0.5;
-      this.rig.root.scale.setScalar(Math.max(0, this.stats.scale * (1 - p)));
+      this.rig.root.scale.setScalar(Math.max(0, this.displayScale * (1 - p)));
       this.rig.root.rotation.z += dt * 8;
       this.rig.root.position.y = this.flyBaseY + p * 0.6;
       if (p >= 1) {

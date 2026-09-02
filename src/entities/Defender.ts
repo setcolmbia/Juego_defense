@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import type { CreatureRig } from '../render/CreatureBuilder';
-import { colToX, rowToZ } from '../world/GridConfig';
+import { computeFitScale, type CreatureRig } from '../render/CreatureBuilder';
+import { colToX, rowToZ, TILE } from '../world/GridConfig';
 
 export type AttackSound = 'spike' | 'peck' | 'roar' | 'zap';
 
@@ -43,6 +43,8 @@ export class Defender {
   private idlePhase = Math.random() * Math.PI * 2;
   private spawnT = 0;
   private bodyBaseYPos: number;
+  /** Artistic scale, clamped so the unit never overflows its grid cell. */
+  readonly displayScale: number;
 
   constructor(stats: DefenderStats, col: number, row: number) {
     this.uid = uidCounter++;
@@ -53,9 +55,12 @@ export class Defender {
     this.attackTimer = Math.random() * 0.3;
     this.energyTimer = stats.energyInterval ?? 3;
     this.rig = stats.buildModel();
+    this.displayScale = Math.min(stats.scale, computeFitScale(this.rig.root, TILE * 0.9, TILE * 0.95));
     this.rig.root.scale.setScalar(0.001);
     this.rig.root.position.set(colToX(col), 0, rowToZ(row));
-    this.rig.root.rotation.y = Math.PI / 2; // face down the lane (+X)
+    // Creatures are modelled head-first along local +X, and lanes run along
+    // world X, so no yaw is needed for a defender to face the incoming aliens.
+    this.rig.root.rotation.y = 0;
     this.bodyBaseYPos = this.rig.body.position.y;
   }
 
@@ -80,7 +85,7 @@ export class Defender {
     // spawn grow-in animation
     if (this.spawnT < 1) {
       this.spawnT = Math.min(1, this.spawnT + dt * 2.2);
-      const s = THREE.MathUtils.smoothstep(this.spawnT, 0, 1) * this.stats.scale;
+      const s = THREE.MathUtils.smoothstep(this.spawnT, 0, 1) * this.displayScale;
       this.rig.root.scale.setScalar(Math.max(0.001, s));
     }
 

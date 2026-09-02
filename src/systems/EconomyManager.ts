@@ -43,6 +43,7 @@ export class EconomyManager {
     for (let i = this.orbs.length - 1; i >= 0; i--) {
       const orb = this.orbs[i];
       const result = orb.update(dt, orb.collecting ? this.collectTarget : undefined);
+      if (result === 'collected') this.add(orb.amount);
       if (result !== 'alive') {
         orb.dispose(this.scene);
         this.orbs.splice(i, 1);

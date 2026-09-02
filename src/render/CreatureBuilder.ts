@@ -107,6 +107,25 @@ function addMesh(parent: THREE.Object3D, geo: THREE.BufferGeometry, material: TH
 }
 
 /**
+ * Largest uniform scale that keeps a rig inside a cell-sized footprint.
+ * Creature configs vary a lot in natural proportions, so an artistic `scale`
+ * alone lets big units (the elephant, the boss) spill over their lane; this
+ * clamps them to the grid so on-screen size always matches the space a unit
+ * actually occupies.
+ */
+export function computeFitScale(root: THREE.Object3D, maxLength: number, maxHeight: number): number {
+  const previous = root.scale.clone();
+  root.scale.setScalar(1);
+  root.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(root);
+  root.scale.copy(previous);
+  const size = box.getSize(new THREE.Vector3());
+  const lengthScale = size.x > 0.0001 ? maxLength / size.x : 1;
+  const heightScale = size.y > 0.0001 ? maxHeight / size.y : 1;
+  return Math.min(lengthScale, heightScale);
+}
+
+/**
  * Builds a stylized low-poly creature from primitive geometry, grouped into a
  * hierarchy of named parts so gait/attack animation systems can drive it.
  */

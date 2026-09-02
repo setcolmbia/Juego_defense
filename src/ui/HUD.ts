@@ -2,6 +2,7 @@ import type { DefenderStats } from '../entities/Defender';
 
 export interface HUDCallbacks {
   onSelect: (id: string | null) => void;
+  onDragStart: (id: string) => void;
   onOpenSettings: () => void;
   onRestart: () => void;
 }
@@ -75,7 +76,7 @@ export class HUD {
     // hint
     const hint = document.createElement('div');
     hint.className = 'crosshair-hint';
-    hint.textContent = 'Elige un animal y haz clic en el terreno · Recoge la energía brillante';
+    hint.textContent = 'Arrastra una carta a una casilla · o clic carta + clic casilla · ESC cancela';
     this.root.appendChild(hint);
 
     // tray
@@ -95,11 +96,18 @@ export class HUD {
       <div class="card-cost">${stats.cost}</div>
       <div class="card-cooldown" style="display:none"></div>
     `;
-    card.addEventListener('click', () => {
+    // Pointerdown arms the card immediately so it can be dragged straight onto
+    // a cell; a release without movement leaves it armed for a follow-up click
+    // on the lawn (both flows work, like Plants vs Zombies).
+    card.addEventListener('pointerdown', (e) => {
       if (card.classList.contains('disabled')) return;
-      const next = this.selectedId === stats.id ? null : stats.id;
-      this.setSelected(next);
-      this.callbacks.onSelect(next);
+      e.preventDefault();
+      if (this.selectedId === stats.id) {
+        this.setSelected(null);
+        this.callbacks.onSelect(null);
+        return;
+      }
+      this.callbacks.onDragStart(stats.id);
     });
     this.tray.appendChild(card);
     this.cards.set(stats.id, {

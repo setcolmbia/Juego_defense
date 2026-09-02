@@ -15,7 +15,8 @@ import { SettingsPanel } from '../ui/SettingsPanel';
 import { ANIMAL_ROSTER, getAnimal } from '../data/AnimalRegistry';
 import { getAlien } from '../data/AlienRegistry';
 import { LEVEL1_WAVES, LEVEL1_NAME } from '../data/Level1';
-import { colToX } from '../world/GridConfig';
+import { colToX, rowToZ, COLS, TILE } from '../world/GridConfig';
+import { computeFitScale } from '../render/CreatureBuilder';
 
 const BASE_MAX_HEALTH = 100;
 
@@ -35,6 +36,10 @@ export class Game {
   private settingsPanel: SettingsPanel;
 
   private selectedAnimalId: string | null = null;
+  private ghost: THREE.Group | null = null;
+  private ghostMeshes: THREE.Mesh[] = [];
+  private dragPointerId: number | null = null;
+  private dragMoved = false;
   private cooldowns = new Map<string, number>();
   private baseHealth = BASE_MAX_HEALTH;
   private clock = new THREE.Clock();
@@ -76,9 +81,8 @@ export class Game {
     this.spawn.onAllWavesClear = () => this.win();
 
     this.hud = new HUD(container, ANIMAL_ROSTER, {
-      onSelect: (id) => {
-        this.selectedAnimalId = id;
-      },
+      onSelect: (id) => this.selectAnimal(id),
+      onDragStart: (id) => this.selectAnimal(id, true),
       onOpenSettings: () => this.settingsPanel.open(),
       onRestart: () => window.location.reload(),
     });
@@ -115,6 +119,18 @@ export class Game {
         return this.combat.addDefender(stats, col, row);
       },
       giveEnergy: (amount = 500) => this.economy.add(amount),
+      spawnOrb: (col = 3, row = 2, amount = 25) => this.economy.spawnManualOrb(colToX(col), rowToZ(row), amount),
+      /** Orb positions projected to CSS pixel coords, for click-path testing. */
+      orbScreenPositions: () => {
+        const rect = this.sceneManager.canvas.getBoundingClientRect();
+        return this.economy.orbs.map((orb) => {
+          const p = orb.position.clone().project(this.sceneManager.camera);
+          return {
+            x: rect.left + ((p.x + 1) / 2) * rect.width,
+            y: rect.top + ((1 - p.y) / 2) * rect.height,
+          };
+        });
+      },
       listAnimals: () => ANIMAL_ROSTER.map((a) => a.id),
       listAliens: () => ['scuttler', 'brute', 'hunter', 'reaper', 'overlord'],
       forceWin: () => this.win(),
@@ -132,11 +148,16 @@ export class Game {
   }
 
   private setupCamera() {
-    const centerX = colToX(3.6);
-    this.sceneManager.camera.position.set(colToX(-1.4), 9.4, 16.5);
-    this.sceneManager.camera.lookAt(centerX, 0.9, 0);
+    // Plants-vs-Zombies framing: the camera sits in front of the lawn looking
+    // straight down the row axis, so lanes run left-to-right across the screen
+    // (base on the left, aliens marching in from the right) and every unit is
+    // seen in side profile. Elevated ~27° for readability without turning it
+    // into a confusing corner/isometric view.
+    const centerX = colToX((COLS - 1) / 2);
+    this.sceneManager.camera.position.set(centerX - 0.6, 8.2, 15.8);
+    this.sceneManager.camera.lookAt(centerX, 0.8, 0);
     this.cameraBase.pos.copy(this.sceneManager.camera.position);
-    this.cameraBase.look.set(centerX, 1.1, 0);
+    this.cameraBase.look.set(centerX, 0.8, 0);
   }
 
   private applySettings(s: GameSettings) {
@@ -151,17 +172,7 @@ export class Game {
   private wireInput() {
     this.input.onMove((ndc) => {
       this.mouseParallax.set(ndc.x, ndc.y);
-      if (this.settingsPanel.isOpen()) {
-        this.grid.setHover(null, true);
-        return;
-      }
-      if (!this.selectedAnimalId) {
-        this.grid.setHover(null, true);
-        return;
-      }
-      const tile = this.grid.raycastTile(ndc, this.sceneManager.camera);
-      const valid = !!tile && this.grid.isFree(tile.col, tile.row);
-      this.grid.setHover(tile, valid);
+      this.updateHoverFromNDC(ndc);
     });
 
     this.input.onClick((ndc) => {
@@ -174,34 +185,158 @@ export class Game {
         return;
       }
 
-      if (!this.selectedAnimalId) return;
-      const stats = getAnimal(this.selectedAnimalId);
-      const tile = this.grid.raycastTile(ndc, this.sceneManager.camera);
-      if (!tile) return;
-      if (!this.grid.isFree(tile.col, tile.row)) {
-        this.audio.playDenied();
-        this.hud.toast('Casilla ocupada');
-        return;
-      }
-      if (!this.economy.canAfford(stats.cost)) {
-        this.audio.playDenied();
-        this.hud.toast('Energía insuficiente');
-        return;
-      }
-      if ((this.cooldowns.get(stats.id) ?? 0) > 0) {
-        this.audio.playDenied();
-        this.hud.toast('En recarga');
-        return;
-      }
-
-      this.economy.spend(stats.cost);
-      this.combat.addDefender(stats, tile.col, tile.row);
-      this.cooldowns.set(stats.id, stats.cooldown);
-      this.audio.playPlace();
-      this.hud.setSelected(null);
-      this.selectedAnimalId = null;
-      this.grid.setHover(null, true);
+      // Second click of the click-card-then-click-cell flow.
+      if (this.selectedAnimalId) this.tryPlaceAt(ndc);
     });
+
+    // Drag-and-drop: the pointer leaves the card and is tracked at the document
+    // level, so the ghost keeps following it over the canvas and a release on a
+    // valid cell plants the defender.
+    document.addEventListener('pointermove', (e) => {
+      if (!this.selectedAnimalId) return;
+      const ndc = this.eventToNDC(e);
+      if (!ndc) return;
+      if (this.dragPointerId !== null) this.dragMoved = true;
+      this.updateHoverFromNDC(ndc);
+    });
+
+    document.addEventListener('pointerup', (e) => {
+      if (this.dragPointerId === null) return;
+      this.dragPointerId = null;
+      if (!this.selectedAnimalId) return;
+      // A click without movement keeps the card armed for the click-click flow.
+      if (!this.dragMoved) return;
+      const ndc = this.eventToNDC(e);
+      if (ndc) this.tryPlaceAt(ndc);
+      else this.cancelPlacement();
+    });
+
+    // Escape / right-click cancels an armed card.
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && this.selectedAnimalId) this.cancelPlacement();
+    });
+    this.sceneManager.canvas.addEventListener('contextmenu', (e) => {
+      if (this.selectedAnimalId) {
+        e.preventDefault();
+        this.cancelPlacement();
+      }
+    });
+  }
+
+  /** Converts a DOM pointer event to canvas NDC, or null if outside the canvas. */
+  private eventToNDC(e: PointerEvent): THREE.Vector2 | null {
+    const rect = this.sceneManager.canvas.getBoundingClientRect();
+    if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) return null;
+    return new THREE.Vector2(
+      ((e.clientX - rect.left) / rect.width) * 2 - 1,
+      -((e.clientY - rect.top) / rect.height) * 2 + 1,
+    );
+  }
+
+  private updateHoverFromNDC(ndc: THREE.Vector2) {
+    if (this.settingsPanel.isOpen() || !this.selectedAnimalId) {
+      this.grid.setHover(null, true);
+      this.setGhostVisible(false);
+      return;
+    }
+    const tile = this.grid.raycastTile(ndc, this.sceneManager.camera);
+    const valid = !!tile && this.grid.isFree(tile.col, tile.row);
+    this.grid.setHover(tile, valid);
+    if (tile) {
+      this.setGhostVisible(true);
+      this.ghost?.position.set(colToX(tile.col), 0, rowToZ(tile.row));
+      this.setGhostTint(valid);
+    } else {
+      this.setGhostVisible(false);
+    }
+  }
+
+  /** Arms a defender card: builds the translucent placement ghost. */
+  private selectAnimal(id: string | null, viaDrag = false) {
+    this.selectedAnimalId = id;
+    this.hud.setSelected(id);
+    this.grid.setPlacementMode(!!id);
+    this.disposeGhost();
+    this.dragMoved = false;
+    this.dragPointerId = viaDrag ? 1 : null;
+    if (!id) {
+      this.grid.setHover(null, true);
+      return;
+    }
+    const stats = getAnimal(id);
+    const rig = stats.buildModel();
+    // Same clamp the real defender uses, so the preview matches what you get.
+    rig.root.scale.setScalar(Math.min(stats.scale, computeFitScale(rig.root, TILE * 0.9, TILE * 0.95)));
+    rig.allMeshes.forEach((m) => {
+      const mat = (m.material as THREE.MeshStandardMaterial).clone();
+      mat.transparent = true;
+      mat.opacity = 0.45;
+      mat.depthWrite = false;
+      m.material = mat;
+      m.castShadow = false;
+      m.receiveShadow = false;
+    });
+    rig.root.visible = false;
+    this.ghost = rig.root;
+    this.ghostMeshes = rig.allMeshes;
+    this.sceneManager.scene.add(this.ghost);
+  }
+
+  private setGhostVisible(visible: boolean) {
+    if (this.ghost) this.ghost.visible = visible;
+  }
+
+  private setGhostTint(valid: boolean) {
+    for (const m of this.ghostMeshes) {
+      const mat = m.material as THREE.MeshStandardMaterial;
+      mat.opacity = valid ? 0.5 : 0.28;
+      mat.emissive?.setHex(valid ? 0x1d3d12 : 0x5a1111);
+      mat.emissiveIntensity = 0.6;
+    }
+  }
+
+  private disposeGhost() {
+    if (!this.ghost) return;
+    this.sceneManager.scene.remove(this.ghost);
+    this.ghostMeshes.forEach((m) => (m.material as THREE.Material).dispose());
+    this.ghost = null;
+    this.ghostMeshes = [];
+  }
+
+  private cancelPlacement() {
+    this.selectAnimal(null);
+  }
+
+  private tryPlaceAt(ndc: THREE.Vector2) {
+    if (this.ended || !this.selectedAnimalId) return;
+    const stats = getAnimal(this.selectedAnimalId);
+    const tile = this.grid.raycastTile(ndc, this.sceneManager.camera);
+    if (!tile) {
+      this.cancelPlacement();
+      return;
+    }
+    if (!this.grid.isFree(tile.col, tile.row)) {
+      this.audio.playDenied();
+      this.hud.toast('Casilla ocupada');
+      return;
+    }
+    if (!this.economy.canAfford(stats.cost)) {
+      this.audio.playDenied();
+      this.hud.toast('Energía insuficiente');
+      return;
+    }
+    if ((this.cooldowns.get(stats.id) ?? 0) > 0) {
+      this.audio.playDenied();
+      this.hud.toast('En recarga');
+      return;
+    }
+
+    this.economy.spend(stats.cost);
+    this.combat.addDefender(stats, tile.col, tile.row);
+    this.cooldowns.set(stats.id, stats.cooldown);
+    this.audio.playPlace();
+    this.particles.collectSparkle(new THREE.Vector3(colToX(tile.col), 0.4, rowToZ(tile.row)), 0x9dff6b);
+    this.selectAnimal(null);
   }
 
   private damageBase(amount: number) {
@@ -236,6 +371,7 @@ export class Game {
 
   private update(dt: number, elapsed: number) {
     this.env.update(dt, elapsed);
+    this.grid.update(dt);
     this.economy.update(dt, true);
     if (!this.ended) this.combat.update(dt, elapsed);
     if (!this.ended) this.spawn.update(dt);
