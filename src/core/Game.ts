@@ -124,8 +124,9 @@ export class Game {
         baseHealth: this.baseHealth,
         wave: this.spawn.waveIndex,
         phase: this.spawn.phase,
-        defenders: this.combat.defenders.length,
-        aliens: this.combat.aliens.length,
+        defenders: this.combat.defenders.map((d) => ({ id: d.stats.id, col: d.col, row: d.row, hp: d.hp, attackTimer: d.attackTimer })),
+        aliens: this.combat.aliens.map((a) => ({ id: a.stats.id, row: a.row, x: a.x, hp: a.hp, dying: a.isDying })),
+        projectiles: this.combat.projectiles.length,
       }),
     };
   }
