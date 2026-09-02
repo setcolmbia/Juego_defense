@@ -163,18 +163,33 @@ export function buildCreature(cfg: Partial<CreatureConfig>): CreatureRig {
   bodyMesh.scale.set(1, 1, c.bodyHeight ?? 1);
 
   if (c.armored) {
-    const plateGeo = new THREE.BoxGeometry(c.bodyRadius * 0.9, c.bodyRadius * 0.5, c.bodyLength * 0.85);
+    // BoxGeometry args are (width=X, height=Y, depth=Z). Body length runs
+    // along X and body width along Z, so this previously had X/Z swapped —
+    // the plate was a short-but-very-wide slab running crosswise (often
+    // wider than the body itself), reading as a detached floating cube
+    // rather than a saddle of armor along the spine. Run it along X instead,
+    // keep it narrower than the body diameter so it hugs the curve, and sink
+    // it in a bit further so it reads as plating on the body, not a block
+    // resting on top of it.
+    const plateGeo = new THREE.BoxGeometry(c.bodyLength * 0.68, c.bodyRadius * 0.4, c.bodyRadius * 1.3);
     const plate = addMesh(body, plateGeo, accentMat, allMeshes);
-    plate.position.y = c.bodyRadius * 0.55;
+    plate.position.y = c.bodyRadius * 0.68;
   }
 
   if (c.spikeCount) {
+    // Cone half-height is fixed (0.17) regardless of body size, so anchoring
+    // the spike center at a fraction of bodyRadius buried most of the cone
+    // inside the body surface — spikes read as invisible. Anchor relative to
+    // the actual capsule surface instead so the quill/spike clearly protrudes.
+    const spikeH = 0.34;
     for (let i = 0; i < c.spikeCount; i++) {
-      const t = (i / (c.spikeCount - 1)) * 2 - 1;
-      const spikeGeo = new THREE.ConeGeometry(0.07, 0.34, 5);
+      const t = (i / Math.max(1, c.spikeCount - 1)) * 2 - 1;
+      const spikeGeo = new THREE.ConeGeometry(0.07, spikeH, 5);
       const spike = addMesh(body, spikeGeo, accentMat, allMeshes);
-      spike.position.set(t * c.bodyLength * 0.45, c.bodyRadius * 0.7, 0);
-      spike.rotation.x = -0.3;
+      const zSide = c.spikeCount > 5 ? (i % 2 === 0 ? 1 : -1) * c.bodyRadius * 0.3 : 0;
+      spike.position.set(t * c.bodyLength * 0.45, c.bodyRadius + spikeH * 0.44, zSide);
+      spike.rotation.x = -0.25;
+      spike.rotation.z = zSide > 0 ? -0.2 : zSide < 0 ? 0.2 : 0;
     }
   }
 

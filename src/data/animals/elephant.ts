@@ -32,7 +32,7 @@ export const Elephant: DefenderStats = {
       snoutLength: 0.55,
       earType: 'long',
       tailType: 'short',
-      hornType: 'antlers',
+      hornType: 'double',
       armored: true,
       roughness: 0.75,
     }),
