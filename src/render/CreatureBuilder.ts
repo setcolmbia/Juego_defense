@@ -399,7 +399,9 @@ export function buildCreature(cfg: Partial<CreatureConfig>): CreatureRig {
       isBiped ? -capHalf * 0.42 : 0,
       0,
     );
-    if (isBiped) tail.rotation.z = 0.85;
+    // Droop the tail instead of leaving it as a horizontal rod poking out
+    // of the silhouette.
+    tail.rotation.z = isBiped ? 0.85 : 0.6;
     body.add(tail);
     if (c.tailType === 'fluffy') {
       const tuftGeo = new THREE.SphereGeometry(0.22, 6, 6);
