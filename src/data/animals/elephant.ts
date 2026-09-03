@@ -41,7 +41,7 @@ export const Elephant: DefenderStats = {
       legCount: 4,
       neckLength: 0.06,
       headRadius: 0.6,
-      headScale: 1.12,
+      headScale: 1.25,
       snoutLength: 0.85,
       mouthStyle: 'trunk',
       earType: 'flap',

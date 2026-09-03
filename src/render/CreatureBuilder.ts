@@ -551,7 +551,7 @@ export function buildCreature(cfg: Partial<CreatureConfig>): CreatureRig {
     const segs = 5;
     for (let i = 0; i < segs; i++) {
       const t = i / (segs - 1);
-      const r = hr * (0.34 - t * 0.16);
+      const r = hr * (0.46 - t * 0.24);
       const segLen = c.snoutLength * 0.42;
       const seg = addMesh(jawTop, new THREE.CapsuleGeometry(r, segLen, 2, 6), secondaryMat, allMeshes);
       const ang = -0.15 - t * 0.85;
@@ -657,10 +657,11 @@ export function buildCreature(cfg: Partial<CreatureConfig>): CreatureRig {
         // side of the skull, angled back so it reads in side profile.
         earGeo = new THREE.CylinderGeometry(hr * 0.85 * es, hr * 0.72 * es, hr * 0.14, 7);
         const flap = addMesh(head, earGeo, earMat, allMeshes);
-        flap.position.set(-hr * 0.42, hr * 0.18, sign * hr * 0.78);
+        flap.position.set(-hr * 0.5, hr * 0.1, sign * hr * 0.92);
         flap.rotation.x = Math.PI / 2;
-        flap.rotation.z = -0.3;
-        flap.scale.set(0.92, 1, 1.15);
+        flap.rotation.z = -0.34;
+        flap.rotation.y = -sign * 0.25;
+        flap.scale.set(0.95, 1, 1.25);
         return flap;
       }
       if (c.earType === 'long') earGeo = new THREE.ConeGeometry(hr * 0.28 * es, hr * 1.4 * es, 5);
@@ -1087,10 +1088,10 @@ export function buildCreature(cfg: Partial<CreatureConfig>): CreatureRig {
         place(g);
         g.scale.setScalar(s);
         for (const sign of [1, -1]) {
-          const tusk = addMesh(g, new THREE.ConeGeometry(hr * 0.17, hr * 1.5, 6), am, allMeshes);
-          tusk.position.set(hr * 0.5, -hr * 0.12, sign * hr * 0.4);
-          tusk.rotation.z = -Math.PI / 2 + 0.75;
-          tusk.rotation.x = sign * 0.22;
+          const tusk = addMesh(g, new THREE.ConeGeometry(hr * 0.24, hr * 1.75, 6), am, allMeshes);
+          tusk.position.set(hr * 0.62, -hr * 0.2, sign * hr * 0.46);
+          tusk.rotation.z = -Math.PI / 2 + 0.62;
+          tusk.rotation.x = sign * 0.26;
         }
         break;
       }
